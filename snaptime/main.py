@@ -2,12 +2,9 @@
 
 import re
 from functools import reduce
-from datetime import datetime, timedelta
+from zoneinfo import ZoneInfo
+from datetime import datetime, timedelta, time
 from dateutil.relativedelta import relativedelta
-import pytz
-
-
-UTC = pytz.utc
 
 
 class SnapParseError(Exception):
@@ -116,19 +113,32 @@ class SnapTransformation(object):
             result = truncate(result, self.unit)
         return result
 
-    def apply_to_with_tz(self, dttm, timezone):
-        """We make sure that after truncating we use the correct timezone,
-        even if we 'jump' over a daylight saving time switch.
 
-        I.e. if we apply "@d" to `Sun Oct 30 04:30:00 CET 2016` (1477798200)
-        we want to have `Sun Oct 30 00:00:00 CEST 2016` (1477778400)
-        but not `Sun Oct 30 00:00:00 CET 2016` (1477782000)
-        """
+    def apply_to_with_tz(self, dttm, timezone):
         result = self.apply_to(dttm)
-        if self.unit in [DAYS, WEEKS, MONTHS, YEARS]:
-            naive_dttm = datetime(result.year, result.month, result.day)
-            result = timezone.localize(naive_dttm)
-        return result
+        fold = getattr(dttm, "fold", 0)
+
+        #naive = datetime.combine(result.date(), result.timetz().replace(tzinfo=None))
+        
+        naive = datetime(result.year, result.month, result.day, result.hour, result.minute, result.second)
+        aware = naive.replace(tzinfo=timezone, fold=fold)
+        validated = aware.astimezone(ZoneInfo("UTC")).astimezone(timezone)
+
+        print(validated, aware, naive)
+
+        if (validated.hour, validated.minute) != (aware.hour, aware.minute):
+            # Hopp tilbake én time og prøv igjen
+            if naive.month > 6:
+                fallback_naive = naive + timedelta(hours=1)
+            else: 
+                fallback_naive = naive - timedelta(hours=1)
+            fallback_aware = fallback_naive.replace(tzinfo=timezone)
+            validated = fallback_aware.astimezone(timezone)
+
+        print(validated)
+        return validated
+
+
 
 
 class DeltaTransformation(object):
@@ -142,7 +152,7 @@ class DeltaTransformation(object):
         return dttm + relativedelta(**{self.unit: self.mult * self.num})
 
     def apply_to_with_tz(self, dttm, timezone):
-        return timezone.normalize(self.apply_to(dttm))
+        return self.apply_to(dttm)
 
 
 def parse(instruction):

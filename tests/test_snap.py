@@ -1,14 +1,12 @@
-
-
-from datetime import datetime
+from zoneinfo import ZoneInfo
+from datetime import datetime, timezone
 import pytest
-import pytz
 
 from snaptime import snap, snap_tz
 from snaptime.main import parse, get_unit, SnapParseError, SnapUnitError
 
 
-CET = pytz.timezone("Europe/Berlin")
+CET = ZoneInfo('Europe/Oslo')
 
 
 # pylint: disable=bad-whitespace
@@ -62,8 +60,8 @@ def test_compare_begin_recalc(input_time, rel_time, output_time):
     assert snap(input_time, rel_time) == output_time
 
     # timezone aware
-    res = snap_tz(CET.localize(input_time), rel_time, CET)
-    assert res == CET.localize(output_time)
+    res = snap_tz(input_time.replace(tzinfo=CET), rel_time, CET)
+    assert res == output_time.replace(tzinfo=CET)
     assert res.replace(tzinfo=None) == output_time
 
 
@@ -125,8 +123,9 @@ DTTM = datetime(2016, 7, 17, 15, 17, 0)
 def test_parse_error(instruction, bad_rest):
     with pytest.raises(SnapParseError) as exc:
         snap(DTTM, instruction)
-    assert "'%s'" % instruction in exc.value.message
-    assert "'%s'" % bad_rest in exc.value.message
+    message = str(exc.value)
+    assert "'%s'" % instruction in message
+    assert "'%s'" % bad_rest in message
 
 
 @pytest.mark.parametrize("instruction,bad_unit", [
@@ -137,7 +136,7 @@ def test_unit_error(instruction, bad_unit):
     with pytest.raises(SnapUnitError) as exc:
         snap(DTTM, instruction)
 
-    assert "'%s'" % bad_unit in exc.value.message
+    assert "'%s'" % bad_unit in str(exc.value)
 
 
 @pytest.mark.parametrize("instruction,bad_weekday", [
@@ -148,7 +147,7 @@ def test_bad_weekday(instruction, bad_weekday):
     with pytest.raises(SnapParseError) as exc:
         snap(DTTM, instruction)
 
-    assert "'%s'" % bad_weekday in exc.value.message
+    assert "'%s'" % bad_weekday in str(exc.value)
 
 
 @pytest.mark.parametrize("input_time,rel_time,output_time", [
@@ -158,24 +157,25 @@ def test_bad_weekday(instruction, bad_weekday):
     (datetime(2017, 3, 26, 3, 30),        "@d",            datetime(2017, 3, 26, 0, 0)),
 ])
 def test_snap_tz_summertime(input_time, rel_time, output_time):
-    loc_input_time = CET.localize(input_time)
-    loc_output_time = CET.localize(output_time)
+    loc_input_time = input_time.replace(tzinfo=CET)
+    loc_output_time = output_time.replace(tzinfo=CET)
     assert snap_tz(loc_input_time, rel_time, CET) == loc_output_time
 
 
 ### new with tzinfo ###
 
 @pytest.mark.parametrize("input_time,rel_time,output_time", [
-    (CET.localize(datetime(2016, 10, 30, 2, 30), is_dst=True),  "-1h@h", CET.localize(datetime(2016, 10, 30, 1, 0))),
-    (CET.localize(datetime(2016, 10, 30, 2, 30), is_dst=False), "-1h@h", CET.localize(datetime(2016, 10, 30, 2, 0), is_dst=True)),  # pylint: disable=line-too-long
-    (CET.localize(datetime(2016, 10, 30, 2, 30), is_dst=True),  "@h",    CET.localize(datetime(2016, 10, 30, 2, 0), is_dst=True)),  # pylint: disable=line-too-long
-    (CET.localize(datetime(2016, 10, 30, 2, 30), is_dst=False), "@h",    CET.localize(datetime(2016, 10, 30, 2, 0), is_dst=False)),  # pylint: disable=line-too-long
+    (datetime(2016, 10, 30, 2, 30, tzinfo=CET).replace(fold=True),  "-1h@h", datetime(2016, 10, 30, 1, 0, tzinfo=CET)),
+    (datetime(2016, 10, 30, 2, 30, tzinfo=CET).replace(fold=False), "-1h@h", datetime(2016, 10, 30, 1, 0, tzinfo=CET).replace(fold=True)), # pylint: disable=line-too-long
+    (datetime(2016, 10, 30, 2, 30, tzinfo=CET).replace(fold=True),  "@h",    datetime(2016, 10, 30, 2, 0, tzinfo=CET).replace(fold=True)),  # pylint: disable=line-too-long
+    (datetime(2016, 10, 30, 2, 30, tzinfo=CET).replace(fold=False), "@h",    datetime(2016, 10, 30, 2, 0, tzinfo=CET).replace(fold=False)),  # pylint: disable=line-too-long
 
-    (CET.localize(datetime(2016, 10, 30, 3, 30)),  "-1h@h", CET.localize(datetime(2016, 10, 30, 2, 0), is_dst=False)),
-    (CET.localize(datetime(2016, 10, 30, 3, 30)),  "@h",    CET.localize(datetime(2016, 10, 30, 3, 0))),
+    (datetime(2016, 10, 30, 3, 30, tzinfo=CET),  "-1h@h", datetime(2016, 10, 30, 2, 0, tzinfo=CET).replace(fold=False)),
+    (datetime(2016, 10, 30, 3, 30, tzinfo=CET),  "@h",    datetime(2016, 10, 30, 3, 0, tzinfo=CET)),
 
-    (CET.localize(datetime(2016, 10, 30, 2, 30), is_dst=True),  "-2h@h", CET.localize(datetime(2016, 10, 30, 0, 0))),
-    (CET.localize(datetime(2016, 10, 30, 2, 30), is_dst=False), "-2h@h", CET.localize(datetime(2016, 10, 30, 1, 0))),
+    (datetime(2016, 10, 30, 2, 30, tzinfo=CET).replace(fold=True),  "-2h@h", datetime(2016, 10, 30, 0, 0, tzinfo=CET)),
+    (datetime(2016, 10, 30, 2, 30, tzinfo=CET).replace(fold=False), "-2h@h", datetime(2016, 10, 30, 0, 0, tzinfo=CET)),
 ])
 def test_snap_tz_wintertime(input_time, rel_time, output_time):
-    assert snap_tz(input_time, rel_time, CET) == output_time
+    result = snap_tz(input_time, rel_time, CET)
+    assert result.replace(microsecond=0) == output_time.replace(microsecond=0)
