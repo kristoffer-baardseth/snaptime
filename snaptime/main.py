@@ -124,8 +124,6 @@ class SnapTransformation(object):
         aware = naive.replace(tzinfo=timezone, fold=fold)
         validated = aware.astimezone(ZoneInfo("UTC")).astimezone(timezone)
 
-        print(validated, aware, naive)
-
         if (validated.hour, validated.minute) != (aware.hour, aware.minute):
             # Hopp tilbake én time og prøv igjen
             if naive.month > 6:
@@ -135,7 +133,6 @@ class SnapTransformation(object):
             fallback_aware = fallback_naive.replace(tzinfo=timezone)
             validated = fallback_aware.astimezone(timezone)
 
-        print(validated)
         return validated
 
 
